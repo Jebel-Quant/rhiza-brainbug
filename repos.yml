@@ -17,7 +17,6 @@ repos:
   # --- Jebel-Quant --------------------------------------------------------
   - { owner: Jebel-Quant, repo: basanos }
   - { owner: Jebel-Quant, repo: fast_minimum_variance }
-  - { owner: Jebel-Quant, repo: futures }
   - { owner: Jebel-Quant, repo: greeks }
   - { owner: Jebel-Quant, repo: jquantstats }
   - { owner: Jebel-Quant, repo: linalg }
@@ -25,7 +24,6 @@ repos:
   - { owner: Jebel-Quant, repo: rhiza-hooks }
   - { owner: Jebel-Quant, repo: rhiza-tools }
   - { owner: Jebel-Quant, repo: shrinkage }
-  - { owner: Jebel-Quant, repo: trends }
 
   # --- tschm --------------------------------------------------------------
   - { owner: tschm, repo: TinyCTA }
