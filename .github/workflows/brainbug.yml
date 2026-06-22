@@ -57,16 +57,21 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install deps
         working-directory: brainbug
         run: |
           python -m pip install --upgrade pip
           pip install -e . || pip install pytest pyyaml
 
-      - name: Run brainbug tests against upstream
+      - name: Run brainbug checks against upstream
         working-directory: brainbug
         env:
           UPSTREAM_DIR: ${{ github.workspace }}/upstream
           UPSTREAM_REPO: ${{ inputs.repo }}
           UPSTREAM_SHA: ${{ inputs.sha }}
+        # File-parsing checks (ruff, bandit, interrogate, semgrep, pyproject,
+        # todos) plus environment checks (pip-audit, license, deptry via uv run).
         run: pytest tests/ -v

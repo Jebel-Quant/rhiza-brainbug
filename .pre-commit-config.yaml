@@ -1,0 +1,81 @@
+# Adapted from jebel-quant/rhiza (bundles/core/.pre-commit-config.yaml).
+# Pins kept in sync with rhiza; a few rhiza-internal hooks were dropped — see the
+# notes at the bottom of this file.
+#
+# Pin node so pre-commit provisions a compatible runtime instead of using the
+# system node. Some npm-based hooks (markdownlint-cli) pull transitive deps that
+# reject odd-numbered current node releases (e.g. v25), failing on EBADENGINE.
+default_language_version:
+  node: "24.12.0"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-toml
+      - id: check-yaml
+        args: ['--unsafe']
+
+  - repo: local
+    hooks:
+      - id: no-python-cache-files
+        name: Prevent committing Python cache files
+        language: fail
+        entry: Python cache files (__pycache__, .pyc, .pyo, .pyd) must not be committed.
+        files: '(/__pycache__/|\.py[cod]$)'
+
+      - id: no-rej-files
+        name: Reject .rej files
+        entry: "bash -c 'find . -type f -name \"*.rej\" | grep -q . && { echo \"ERROR: .rej files detected\"; find . -type f -name \"*.rej\"; exit 1; } || exit 0'"
+        language: system
+        pass_filenames: false
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 'v0.15.18'
+    hooks:
+      - id: ruff
+        args: [ --fix, --exit-non-zero-on-fix, --unsafe-fixes ]
+      # Run the formatter
+      - id: ruff-format
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.49.0
+    hooks:
+      - id: markdownlint
+        args: ["--disable", "MD013"]
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.37.3
+    hooks:
+      - id: check-github-workflows
+        args: ["--verbose"]
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.12
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/abravalheri/validate-pyproject
+    rev: v0.25
+    hooks:
+      - id: validate-pyproject
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        args: ["--exclude", ".venv,tests,.git,.pytest_cache,site"]
+
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: v1.5.0
+    hooks:
+      - id: betterleaks
+
+# Dropped from the rhiza bundle (would fail or pull rhiza into this repo):
+#   - check-renovate        : brainbug has no renovate config
+#   - interrogate           : expects a src/ package + [tool.interrogate]; brainbug
+#                             is ops scripts, not a documented library
+#   - uv-lock               : brainbug doesn't use a uv.lock workflow
+#   - Jebel-Quant/rhiza-hooks (check-rhiza-config, check-rhiza-workflow-names,
+#     check-makefile-targets, check-python-version-consistency): rhiza-internal,
+#     and adding it would be *more* rhiza in this repo, not less

@@ -11,6 +11,9 @@ dependencies = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+    "requires_env: check needs the upstream's resolved dependency environment (uv run)",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
