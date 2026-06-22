@@ -80,27 +80,32 @@ STATUS = {
 }
 
 
-def card(entry: dict, commit: dict | None, verdict: dict | None, archived: bool = False) -> str:
+def card(entry: dict, meta: dict, commit: dict | None, verdict: dict | None,
+         archived: bool = False) -> str:
     full = f"{entry['owner']}/{entry['repo']}"
     cls, label = STATUS.get((verdict or {}).get("conclusion"), ("none", "unknown"))
 
     if archived:
-        # Archived repos are inert — show a greyed-out card, no live verdict.
-        commit_html = '<span class="msg dim">archived — no longer monitored</span>'
+        # Archived repos are inert — greyed out, never polled or tested.
         return f"""    <div class="card archived">
       <div class="row">
         <a class="name" href="https://github.com/{full}">{html.escape(full)}</a>
         <span class="badge none">archived</span>
       </div>
-      <div class="commit">{commit_html}</div>
+      <div class="commit"><span class="msg dim">archived — not polled or tested</span></div>
     </div>"""
 
+    # description
+    desc = (meta.get("description") or "").strip()
+    desc_html = f'<div class="desc">{html.escape(desc[:110])}</div>' if desc else ""
+
+    # latest commit
     if commit:
         c = commit["commit"]
-        msg = html.escape(c["message"].splitlines()[0][:80])
+        msg = html.escape(c["message"].splitlines()[0][:72])
         sha = commit["sha"][:7]
         when = c["committer"]["date"][:10]
-        gh_user = commit.get("author")  # top-level GitHub user (may be null)
+        gh_user = commit.get("author")
         author = html.escape(gh_user["login"] if gh_user else c["author"]["name"])
         commit_html = (
             f'<a class="sha" href="{html.escape(commit["html_url"])}">{sha}</a> '
@@ -108,13 +113,31 @@ def card(entry: dict, commit: dict | None, verdict: dict | None, archived: bool 
             f'<div class="meta">{author} · {when}</div>'
         )
         tested = verdict and verdict.get("sha", "").startswith(sha)
-        fresh = "" if not verdict else (
-            '<span class="tag fresh">latest tested</span>' if tested
-            else '<span class="tag stale">newer commit untested</span>'
-        )
     else:
         commit_html = '<span class="msg dim">commit unavailable</span>'
-        fresh = ""
+        tested = False
+
+    # repo stats (from metadata already fetched)
+    lang = meta.get("language")
+    stats = [
+        f'<span class="stat" title="stars">★ {meta.get("stargazers_count", 0)}</span>',
+        f'<span class="stat" title="forks">⑂ {meta.get("forks_count", 0)}</span>',
+        f'<span class="stat" title="open issues &amp; PRs">⊙ {meta.get("open_issues_count", 0)}</span>',
+    ]
+    if lang:
+        stats.append(f'<span class="stat lang">{html.escape(lang)}</span>')
+    if meta.get("pushed_at"):
+        stats.append(f'<span class="stat">pushed {meta["pushed_at"][:10]}</span>')
+    stats_html = f'<div class="stats">{"".join(stats)}</div>'
+
+    # brainbug verdict line
+    if verdict:
+        vwhen = (verdict.get("when") or "")[:10]
+        tag = ('<span class="tag fresh">latest tested</span>' if tested
+               else '<span class="tag stale">newer commit untested</span>')
+        verdict_html = f'<div class="verdict">{tag}<span class="vwhen">{vwhen}</span></div>'
+    else:
+        verdict_html = ""
 
     vurl = (verdict or {}).get("url")
     badge = f'<a class="badge {cls}" href="{html.escape(vurl)}">{label}</a>' if vurl \
@@ -125,8 +148,10 @@ def card(entry: dict, commit: dict | None, verdict: dict | None, archived: bool 
         <a class="name" href="https://github.com/{full}">{html.escape(full)}</a>
         {badge}
       </div>
+      {desc_html}
       <div class="commit">{commit_html}</div>
-      {fresh}
+      {stats_html}
+      {verdict_html}
     </div>"""
 
 
@@ -150,12 +175,12 @@ def main() -> int:
         archived = bool(meta.get("archived"))
         print(f"  {full}@{ref}{' [archived]' if archived else ''}")
         if archived:
-            cards.append(card(entry, None, None, archived=True))
+            cards.append(card(entry, meta, None, None, archived=True))
             counts["archived"] += 1
             continue
         commit = api(f"/repos/{full}/commits/{ref}", token)
         verdict = verdicts.get(full)
-        cards.append(card(entry, commit, verdict))
+        cards.append(card(entry, meta, commit, verdict))
         c = (verdict or {}).get("conclusion")
         counts["ok" if c == "success" else "bad" if c == "failure" else "other"] += 1
 
@@ -209,11 +234,18 @@ TEMPLATE = """<!doctype html>
   .badge.bad {{ background:rgba(248,81,73,.15); color:var(--bad); }}
   .badge.warn {{ background:rgba(210,153,34,.15); color:var(--warn); }}
   .badge.none {{ background:rgba(110,118,129,.15); color:var(--none); }}
+  .desc {{ margin-top:6px; font-size:12.5px; color:var(--dim); }}
   .commit {{ margin-top:10px; font-size:13px; }}
   .sha {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#58a6ff; text-decoration:none; }}
   .msg {{ color:var(--fg); }} .msg.dim, .dim {{ color:var(--dim); }}
   .meta {{ color:var(--dim); font-size:12px; margin-top:3px; }}
-  .tag {{ display:inline-block; margin-top:8px; font-size:11px; padding:1px 8px; border-radius:4px; }}
+  .stats {{ display:flex; flex-wrap:wrap; gap:12px; margin-top:11px; padding-top:10px;
+    border-top:1px solid var(--border); font-size:12px; color:var(--dim); }}
+  .stat {{ white-space:nowrap; }}
+  .stat.lang {{ color:#58a6ff; }}
+  .verdict {{ display:flex; align-items:center; gap:8px; margin-top:9px; }}
+  .vwhen {{ color:var(--dim); font-size:11px; }}
+  .tag {{ display:inline-block; font-size:11px; padding:1px 8px; border-radius:4px; }}
   .tag.fresh {{ color:var(--ok); border:1px solid rgba(63,185,80,.4); }}
   .tag.stale {{ color:var(--warn); border:1px solid rgba(210,153,34,.4); }}
   footer {{ max-width:980px; margin:0 auto; padding:0 20px 40px; color:var(--dim); font-size:12px; }}

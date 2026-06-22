@@ -46,6 +46,16 @@ def _request(url: str, token: str, method: str = "GET", payload: dict | None = N
         return resp.status, (json.loads(body) if body else None)
 
 
+def is_archived(owner: str, repo: str, token: str) -> bool:
+    """Archived repos are inert — never poll or test them."""
+    try:
+        _, data = _request(f"{API}/repos/{owner}/{repo}", token)
+    except urllib.error.HTTPError as exc:  # pragma: no cover
+        print(f"  ! {owner}/{repo}: API error {exc.code}", file=sys.stderr)
+        return False  # don't silently drop on a transient error
+    return bool(data and data.get("archived"))
+
+
 def latest_sha(owner: str, repo: str, ref: str, token: str) -> str | None:
     url = f"{API}/repos/{owner}/{repo}/commits/{ref}"
     try:
@@ -76,9 +86,15 @@ def main() -> int:
     STATE_DIR.mkdir(exist_ok=True)
 
     changed = 0
+    skipped = 0
     for entry in cfg["repos"]:
         owner, repo = entry["owner"], entry["repo"]
         ref = entry.get("ref", default_ref)
+
+        if is_archived(owner, repo, token):
+            print(f"  ~ {owner}/{repo} archived — skipping")
+            skipped += 1
+            continue
 
         sha = latest_sha(owner, repo, ref, token)
         if not sha:
@@ -96,7 +112,7 @@ def main() -> int:
         cache.write_text(sha + "\n")
         changed += 1
 
-    print(f"done: {changed} repo(s) dispatched")
+    print(f"done: {changed} repo(s) dispatched, {skipped} archived skipped")
     return 0
 
 
