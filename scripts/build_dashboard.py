@@ -215,13 +215,14 @@ TEMPLATE = """<!doctype html>
   * {{ box-sizing:border-box; }}
   body {{ margin:0; background:var(--bg); color:var(--fg);
     font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }}
-  header {{ padding:28px 20px 12px; max-width:980px; margin:0 auto; }}
+  header {{ padding:28px 20px 12px; max-width:1200px; margin:0 auto; }}
   h1 {{ font-size:20px; margin:0 0 4px; }}
   h1 .mono {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--dim); }}
   .summary {{ color:var(--dim); font-size:13px; }}
   .summary b.ok {{ color:var(--ok); }} .summary b.bad {{ color:var(--bad); }}
-  main {{ max-width:980px; margin:0 auto; padding:8px 20px 48px;
-    display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }}
+  main {{ max-width:1200px; margin:0 auto; padding:8px 20px 48px;
+    display:grid; grid-template-columns:repeat(2,1fr); gap:16px; }}
+  @media (max-width:760px) {{ main {{ grid-template-columns:1fr; }} }}
   .card {{ background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:14px 16px; }}
   .card.archived {{ opacity:.5; filter:grayscale(1); background:#10141a; border-style:dashed; }}
   .card.archived .name {{ color:var(--dim); }}
@@ -248,7 +249,7 @@ TEMPLATE = """<!doctype html>
   .tag {{ display:inline-block; font-size:11px; padding:1px 8px; border-radius:4px; }}
   .tag.fresh {{ color:var(--ok); border:1px solid rgba(63,185,80,.4); }}
   .tag.stale {{ color:var(--warn); border:1px solid rgba(210,153,34,.4); }}
-  footer {{ max-width:980px; margin:0 auto; padding:0 20px 40px; color:var(--dim); font-size:12px; }}
+  footer {{ max-width:1200px; margin:0 auto; padding:0 20px 40px; color:var(--dim); font-size:12px; }}
 </style>
 </head>
 <body>
