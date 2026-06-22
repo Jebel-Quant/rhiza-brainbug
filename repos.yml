@@ -32,7 +32,7 @@ repos:
   - { owner: tschm, repo: cs }
   - { owner: tschm, repo: pyhrp }
   - { owner: tschm, repo: jsharpe }
-  - { owner: tschm, repo: loman }
+  - { owner: tschm, repo: loman, ref: master }
 
   # --- cvxgrp -------------------------------------------------------------
   - { owner: cvxgrp, repo: cvxcla }
