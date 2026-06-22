@@ -52,6 +52,18 @@ def test_thing(upstream):           # upstream = Path to checked-out repo
     assert (upstream / "pyproject.toml").exists()
 ```
 
+## Status dashboard (GitHub Pages)
+
+A static dashboard shows each monitored repo's latest commit and its most recent
+brainbug verdict. It's generated **server-side** by `scripts/build_dashboard.py`
+(brainbug is private, so a browser couldn't read its runs directly) and published
+to Pages by `.github/workflows/pages.yml` — rebuilt after every brainbug run, on
+pushes to `main`, and every 30 min.
+
+Enable once: **Settings → Pages → Source: GitHub Actions** (or
+`gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow`), then run the
+`pages` workflow. Verdicts appear as repos get tested under the new run naming.
+
 ## Setup checklist
 
 1. **Create the repo** `Jebel-Quant/rhiza-brainbug` and push this skeleton.

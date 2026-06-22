@@ -1,0 +1,51 @@
+# Build the status dashboard and publish it to GitHub Pages.
+# Regenerates after every brainbug run (workflow_run), on pushes to main, on a
+# 30-min schedule (to refresh "latest commit" info), and on demand.
+name: pages
+
+on:
+  workflow_run:
+    workflows: [on-dispatch]
+    types: [completed]
+  push:
+    branches: [main]
+    paths:
+      - repos.yml
+      - scripts/build_dashboard.py
+      - .github/workflows/pages.yml
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install pyyaml
+      - name: Build dashboard
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BRAINBUG_REPO: ${{ github.repository }}
+        run: BUILT_AT="$(date -u '+%Y-%m-%d %H:%M UTC')" python scripts/build_dashboard.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

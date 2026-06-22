@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+"""Build a static status dashboard for the monitored repos.
+
+Runs server-side (in CI, with a token) and renders a self-contained
+``site/index.html`` that needs no client-side API calls — so it works even
+though brainbug itself is private. For each repo in repos.yml it shows:
+
+  * the upstream repo's latest commit (sha, message, author, when),
+  * the last brainbug verdict for that repo (from on-dispatch.yml run names),
+  * whether brainbug has tested the latest commit yet.
+
+Env:
+    GITHUB_TOKEN   token with read access (default Actions token is enough for
+                   public monitored repos + brainbug's own Actions).
+    BRAINBUG_REPO  "owner/repo" of this repo (defaults to Jebel-Quant/rhiza-brainbug).
+    BUILT_AT       ISO timestamp to stamp the page (optional; CI passes one).
+"""
+
+from __future__ import annotations
+
+import html
+import json
+import os
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "site" / "index.html"
+API = "https://api.github.com"
+
+
+def api(path: str, token: str):
+    req = urllib.request.Request(API + path)
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", "2022-11-28")
+    try:
+        with urllib.request.urlopen(req) as resp:  # noqa: S310
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        print(f"  ! {path}: {exc.code}")
+        return None
+
+
+def latest_verdicts(brainbug: str, token: str) -> dict[str, dict]:
+    """Map 'owner/repo' -> latest brainbug run {conclusion, url, when}."""
+    data = api(
+        f"/repos/{brainbug}/actions/workflows/on-dispatch.yml/runs?per_page=100",
+        token,
+    )
+    out: dict[str, dict] = {}
+    for run in (data or {}).get("workflow_runs", []):
+        name = run.get("name", "")
+        # "brainbug · owner/repo · sha"
+        parts = [p.strip() for p in name.split("·")]
+        if len(parts) < 3:
+            continue
+        repo, sha = parts[1], parts[2]
+        if repo in out:  # runs come newest-first; keep the first seen
+            continue
+        out[repo] = {
+            "conclusion": run.get("conclusion") or run.get("status"),
+            "url": run.get("html_url"),
+            "sha": sha,
+            "when": run.get("created_at"),
+        }
+    return out
+
+
+STATUS = {
+    "success": ("ok", "passing"),
+    "failure": ("bad", "failing"),
+    "cancelled": ("warn", "cancelled"),
+    "in_progress": ("warn", "running"),
+    "queued": ("warn", "queued"),
+    None: ("none", "never run"),
+}
+
+
+def card(entry: dict, commit: dict | None, verdict: dict | None) -> str:
+    full = f"{entry['owner']}/{entry['repo']}"
+    cls, label = STATUS.get((verdict or {}).get("conclusion"), ("none", "unknown"))
+
+    if commit:
+        c = commit["commit"]
+        msg = html.escape(c["message"].splitlines()[0][:80])
+        sha = commit["sha"][:7]
+        when = c["committer"]["date"][:10]
+        gh_user = commit.get("author")  # top-level GitHub user (may be null)
+        author = html.escape(gh_user["login"] if gh_user else c["author"]["name"])
+        commit_html = (
+            f'<a class="sha" href="{html.escape(commit["html_url"])}">{sha}</a> '
+            f'<span class="msg">{msg}</span>'
+            f'<div class="meta">{author} · {when}</div>'
+        )
+        tested = verdict and verdict.get("sha", "").startswith(sha)
+        fresh = "" if not verdict else (
+            '<span class="tag fresh">latest tested</span>' if tested
+            else '<span class="tag stale">newer commit untested</span>'
+        )
+    else:
+        commit_html = '<span class="msg dim">commit unavailable</span>'
+        fresh = ""
+
+    vurl = (verdict or {}).get("url")
+    badge = f'<a class="badge {cls}" href="{html.escape(vurl)}">{label}</a>' if vurl \
+        else f'<span class="badge {cls}">{label}</span>'
+
+    return f"""    <div class="card">
+      <div class="row">
+        <a class="name" href="https://github.com/{full}">{html.escape(full)}</a>
+        {badge}
+      </div>
+      <div class="commit">{commit_html}</div>
+      {fresh}
+    </div>"""
+
+
+def main() -> int:
+    token = os.environ["GITHUB_TOKEN"]
+    brainbug = os.environ.get("BRAINBUG_REPO", "Jebel-Quant/rhiza-brainbug")
+    built_at = os.environ.get("BUILT_AT", "")
+
+    cfg = yaml.safe_load((ROOT / "repos.yml").read_text())
+    default_ref = cfg.get("defaults", {}).get("ref", "main")
+
+    print("fetching brainbug verdicts...")
+    verdicts = latest_verdicts(brainbug, token)
+
+    cards = []
+    counts = {"ok": 0, "bad": 0, "other": 0}
+    for entry in cfg["repos"]:
+        full = f"{entry['owner']}/{entry['repo']}"
+        ref = entry.get("ref", default_ref)
+        print(f"  {full}@{ref}")
+        commit = api(f"/repos/{full}/commits/{ref}", token)
+        verdict = verdicts.get(full)
+        cards.append(card(entry, commit, verdict))
+        c = (verdict or {}).get("conclusion")
+        counts["ok" if c == "success" else "bad" if c == "failure" else "other"] += 1
+
+    page = TEMPLATE.format(
+        brainbug=html.escape(brainbug),
+        total=len(cfg["repos"]),
+        ok=counts["ok"],
+        bad=counts["bad"],
+        other=counts["other"],
+        built_at=html.escape(built_at),
+        cards="\n".join(cards),
+    )
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(page)
+    print(f"wrote {OUT} ({len(cfg['repos'])} repos)")
+    return 0
+
+
+TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="900">
+<title>rhiza-brainbug · monitored repos</title>
+<style>
+  :root {{
+    --bg:#0d1117; --panel:#161b22; --border:#30363d; --fg:#e6edf3; --dim:#8b949e;
+    --ok:#3fb950; --bad:#f85149; --warn:#d29922; --none:#6e7681;
+  }}
+  * {{ box-sizing:border-box; }}
+  body {{ margin:0; background:var(--bg); color:var(--fg);
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }}
+  header {{ padding:28px 20px 12px; max-width:980px; margin:0 auto; }}
+  h1 {{ font-size:20px; margin:0 0 4px; }}
+  h1 .mono {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:var(--dim); }}
+  .summary {{ color:var(--dim); font-size:13px; }}
+  .summary b.ok {{ color:var(--ok); }} .summary b.bad {{ color:var(--bad); }}
+  main {{ max-width:980px; margin:0 auto; padding:8px 20px 48px;
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }}
+  .card {{ background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:14px 16px; }}
+  .row {{ display:flex; align-items:center; justify-content:space-between; gap:8px; }}
+  .name {{ font-weight:600; color:var(--fg); text-decoration:none; }}
+  .name:hover {{ text-decoration:underline; }}
+  .badge {{ font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px;
+    text-decoration:none; white-space:nowrap; }}
+  .badge.ok {{ background:rgba(63,185,80,.15); color:var(--ok); }}
+  .badge.bad {{ background:rgba(248,81,73,.15); color:var(--bad); }}
+  .badge.warn {{ background:rgba(210,153,34,.15); color:var(--warn); }}
+  .badge.none {{ background:rgba(110,118,129,.15); color:var(--none); }}
+  .commit {{ margin-top:10px; font-size:13px; }}
+  .sha {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; color:#58a6ff; text-decoration:none; }}
+  .msg {{ color:var(--fg); }} .msg.dim, .dim {{ color:var(--dim); }}
+  .meta {{ color:var(--dim); font-size:12px; margin-top:3px; }}
+  .tag {{ display:inline-block; margin-top:8px; font-size:11px; padding:1px 8px; border-radius:4px; }}
+  .tag.fresh {{ color:var(--ok); border:1px solid rgba(63,185,80,.4); }}
+  .tag.stale {{ color:var(--warn); border:1px solid rgba(210,153,34,.4); }}
+  footer {{ max-width:980px; margin:0 auto; padding:0 20px 40px; color:var(--dim); font-size:12px; }}
+</style>
+</head>
+<body>
+<header>
+  <h1>brainbug <span class="mono">· monitored repos</span></h1>
+  <div class="summary">
+    {total} repos · <b class="ok">{ok} passing</b> · <b class="bad">{bad} failing</b> · {other} other
+  </div>
+</header>
+<main>
+{cards}
+</main>
+<footer>
+  Generated by <span class="mono">{brainbug}</span> · {built_at} · auto-refreshes every 15 min
+</footer>
+</body>
+</html>
+"""
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

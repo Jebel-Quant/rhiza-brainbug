@@ -3,6 +3,10 @@
 # whose SHA changed; those events land here and kick off the brainbug run.
 name: on-dispatch
 
+# The run name encodes which upstream repo+SHA this run tested, so the dashboard
+# (scripts/build_dashboard.py) can map brainbug verdicts back to repos.
+run-name: "brainbug · ${{ github.event.client_payload.repo }} · ${{ github.event.client_payload.sha }}"
+
 on:
   repository_dispatch:
     types: [upstream-commit]
