@@ -9,9 +9,15 @@
 #   ref:   branch to track / check out (default: defaults.ref below)
 
 defaults:
-  ref: main
   tests:
     - tests/
+  # Branch filter applied to every repo (fnmatch globs). A per-repo `branches:`
+  # block overrides this. `exclude` drops matches; optional `include` restricts
+  # monitoring to matches only.
+  branches:
+    exclude:
+      - "renovate/*"
+      - "dependabot/*"
 
 repos:
   # --- Jebel-Quant --------------------------------------------------------

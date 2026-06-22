@@ -1,0 +1,21 @@
+{
+  "add-claude-commands": "d26eda6ccafcf4457423b1c1418c897f26304e0f",
+  "add-claude-commands-upstream": "09146ee1d1ee4a36c887214e9b798e969b0e456d",
+  "chore/add-rhiza-claude-commands": "2bfc6ce8f9eb0fe16dfa9cc984c540419a8617a3",
+  "master": "2df782ed2b86bbeff70812d59599f39500cd9c78",
+  "rhiza_v0.18.4": "854e28f55850a8166230e7861ca540d38b400ea4",
+  "rhiza_v0.18.8": "6e46d5d5882d0eff36ce6b6326a85412023b4a84",
+  "split/completions": "07ab47cac6e89e47e0bffbc4379e87cd2a65ad91",
+  "split/dependabot-requirements": "1c98872d34aa6c5af4c72a9354cffadb34d74f04",
+  "split/devcontainer": "7d7bb1da1cbb4f5ad68483d47bc3937e657730ad",
+  "split/docs": "1e0ae0e4b3e7425d99784e1557407b0c9c77777e",
+  "split/doctor": "f650739d251a266cdcb158ea73f89c736f5d0dfd",
+  "split/github": "b3d0c6fb0c9d6cc0f340882ba5da28a49f0ef90d",
+  "split/pre-commit": "d53ccd0f32fa22769671f187a96ed76e6196ac47",
+  "split/rhiza-core": "0eddfc2cc707b5d65a5bac592ee449527bbba9ee",
+  "split/rhiza-makd-semgrep": "84f2c5b9ace9f431465e72b693f4a268d29bf6aa",
+  "split/rhiza-template": "4a4496dd48e64fe3a22977bac4f49cc42050ddf5",
+  "split/rhiza-tests": "6de2eb4d0584fd3764cbd5adce4ae9ada7e6f44d",
+  "split/src-ty-suppressions": "77107bb932788a66fa3bd584d6a88306a3db3b3b",
+  "split/test-files": "d1f1a89750f5ad35b3bb37ded5ed62031c9eeb28"
+}

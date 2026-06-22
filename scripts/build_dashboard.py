@@ -26,6 +26,7 @@ import urllib.request
 from pathlib import Path
 
 import yaml
+from branchfilter import is_monitored, resolve_filters
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "site" / "index.html"
@@ -182,6 +183,7 @@ def main() -> int:
     built_at = os.environ.get("BUILT_AT", "")
 
     cfg = yaml.safe_load((ROOT / "repos.yml").read_text())
+    defaults = cfg.get("defaults", {})
 
     print("fetching brainbug verdicts...")
     verdicts = latest_verdicts(brainbug, token)
@@ -197,7 +199,8 @@ def main() -> int:
             cards.append(card(entry, meta, None, None, archived=True))
             counts["archived"] += 1
             continue
-        branches = branch_names(full, token)
+        filters = resolve_filters(entry, defaults)
+        branches = [b for b in branch_names(full, token) if is_monitored(b, filters)]
         head = meta.get("default_branch") or "main"
         commit = api(f"/repos/{full}/commits/{head}", token)
         verdict = verdicts.get(full)

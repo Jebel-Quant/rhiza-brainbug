@@ -32,6 +32,7 @@ import urllib.request
 from pathlib import Path
 
 import yaml
+from branchfilter import is_monitored, resolve_filters
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = ROOT / "state"
@@ -96,6 +97,7 @@ def main() -> int:
     brainbug = os.environ["BRAINBUG_REPO"]
 
     cfg = yaml.safe_load((ROOT / "repos.yml").read_text())
+    defaults = cfg.get("defaults", {})
 
     STATE_DIR.mkdir(exist_ok=True)
 
@@ -110,6 +112,12 @@ def main() -> int:
             continue
 
         branches = list_branches(owner, repo, token)
+        if not branches:
+            continue
+
+        # drop excluded branches (renovate/*, dependabot/*, …) before diffing
+        filters = resolve_filters(entry, defaults)
+        branches = {b: s for b, s in branches.items() if is_monitored(b, filters)}
         if not branches:
             continue
 
