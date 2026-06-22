@@ -1,12 +1,13 @@
 # Build the status dashboard and publish it to GitHub Pages.
-# Regenerates after every brainbug run (workflow_run), on pushes to main, on a
-# 30-min schedule (to refresh "latest commit" info), and on demand.
+# Refreshes on a 15-min schedule (picks up new commits + brainbug verdicts), on
+# pushes to main that touch the dashboard, and on demand.
+#
+# Deliberately NOT triggered per brainbug run: that fired a build after every
+# upstream-commit run, and a burst (e.g. the backfill) stacked dozens of builds
+# that cancelled each other into red "cancelled" noise. The schedule covers it.
 name: pages
 
 on:
-  workflow_run:
-    workflows: [on-dispatch]
-    types: [completed]
   push:
     branches: [main]
     paths:
@@ -14,7 +15,7 @@ on:
       - scripts/build_dashboard.py
       - .github/workflows/pages.yml
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch: {}
 
 permissions:
@@ -22,9 +23,12 @@ permissions:
   pages: write
   id-token: write
 
+# Allow one deployment at a time. Do NOT cancel an in-progress deploy — let it
+# finish (GitHub's recommended setting for Pages). Intermediate queued runs are
+# superseded by the newest, which is fine since each rebuild is idempotent.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-deploy:

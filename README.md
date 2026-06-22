@@ -57,8 +57,8 @@ def test_thing(upstream):           # upstream = Path to checked-out repo
 A static dashboard shows each monitored repo's latest commit and its most recent
 brainbug verdict. It's generated **server-side** by `scripts/build_dashboard.py`
 (brainbug is private, so a browser couldn't read its runs directly) and published
-to Pages by `.github/workflows/pages.yml` — rebuilt after every brainbug run, on
-pushes to `main`, and every 30 min.
+to Pages by `.github/workflows/pages.yml` — rebuilt every 15 min (picking up new
+commits and brainbug verdicts) and on pushes to `main`.
 
 Enable once: **Settings → Pages → Source: GitHub Actions** (or
 `gh api -X POST repos/<owner>/<repo>/pages -f build_type=workflow`), then run the
