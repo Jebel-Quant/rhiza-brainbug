@@ -8,21 +8,28 @@ checks that span repos you don't want to duplicate everywhere.
 ## How a commit in repo B triggers a run in brainbug (A)
 
 Pure polling — nothing is installed in the monitored repos. Brainbug runs on a
-cron, compares each repo's latest SHA against the cache in `state/`, and
-self-dispatches a run for any that changed.
+cron and, for **every branch** of every repo, compares the branch's head SHA
+against the per-repo map in `state/<owner>__<repo>.json`, self-dispatching a run
+for any branch that is new or changed.
 
 ```
-poll.yml (cron) ─▶ poll.py ─▶ diff latest SHA vs state/
-                                      │ (changed)
+poll.yml (cron) ─▶ poll.py ─▶ for each repo: list ALL branches,
+                              diff each branch head vs state/<repo>.json
+                                      │ (new/changed branch)
                                       ▼
-                            repository_dispatch(upstream-commit)  [self]
+                   repository_dispatch(upstream-commit {repo, branch, sha})  [self]
                                       ▼
                               on-dispatch.yml
                                       │ (workflow_call)
                                       ▼
                               brainbug.yml
-                     checkout upstream@sha + tests/  ─▶ pytest
+                  checkout upstream@sha (that branch) + tests/  ─▶ pytest
 ```
+
+> **Volume:** watching every branch means a run per branch update — renovate /
+> dependabot branches can be noisy, and the first poll dispatches every branch of
+> every repo at once. Narrow it with an include/exclude glob in `repos.yml` if
+> needed (not yet implemented).
 
 > **Cadence:** routine polling is driven externally by `make loop` (see below),
 > because GitHub's `schedule` trigger is best-effort with a ~5-minute floor and
@@ -35,7 +42,7 @@ poll.yml (cron) ─▶ poll.py ─▶ diff latest SHA vs state/
 repos.yml                       monitored repos + which tests to run
 tests/                          the brainbugs — pytest run AGAINST upstream code
 scripts/poll.py                 poller for all monitored repos
-state/                          last-seen SHA per repo (auto-committed)
+state/                          per-repo {branch: sha} maps, JSON (auto-committed)
 .github/workflows/
   brainbug.yml                  reusable: checkout upstream@sha, run tests/
   on-dispatch.yml               on repository_dispatch -> brainbug.yml

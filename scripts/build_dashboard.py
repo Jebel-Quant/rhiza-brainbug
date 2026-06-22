@@ -45,26 +45,39 @@ def api(path: str, token: str):
         return None
 
 
+def branch_names(full: str, token: str) -> list[str]:
+    """Branch names for a repo (first 100 — enough for a display count)."""
+    data = api(f"/repos/{full}/branches?per_page=100", token)
+    return [b["name"] for b in (data or [])]
+
+
 def latest_verdicts(brainbug: str, token: str) -> dict[str, dict]:
-    """Map 'owner/repo' -> latest brainbug run {conclusion, url, when}."""
+    """Map 'owner/repo' -> latest brainbug run {conclusion, url, sha, branch, when}.
+
+    Run names are "brainbug · owner/repo · branch · sha" (older runs omit the
+    branch: "brainbug · owner/repo · sha"). Runs arrive newest-first; the first
+    one seen per repo is the latest across all its branches.
+    """
     data = api(
         f"/repos/{brainbug}/actions/workflows/on-dispatch.yml/runs?per_page=100",
         token,
     )
     out: dict[str, dict] = {}
     for run in (data or {}).get("workflow_runs", []):
-        name = run.get("name", "")
-        # "brainbug · owner/repo · sha"
-        parts = [p.strip() for p in name.split("·")]
-        if len(parts) < 3:
+        parts = [p.strip() for p in run.get("name", "").split("·")]
+        if len(parts) == 4:
+            repo, branch, sha = parts[1], parts[2], parts[3]
+        elif len(parts) == 3:
+            repo, branch, sha = parts[1], None, parts[2]
+        else:
             continue
-        repo, sha = parts[1], parts[2]
-        if repo in out:  # runs come newest-first; keep the first seen
+        if repo in out:
             continue
         out[repo] = {
             "conclusion": run.get("conclusion") or run.get("status"),
             "url": run.get("html_url"),
             "sha": sha,
+            "branch": branch,
             "when": run.get("created_at"),
         }
     return out
@@ -81,7 +94,7 @@ STATUS = {
 
 
 def card(entry: dict, meta: dict, commit: dict | None, verdict: dict | None,
-         ref: str = "main", archived: bool = False) -> str:
+         branches: list[str] | None = None, archived: bool = False) -> str:
     full = f"{entry['owner']}/{entry['repo']}"
     cls, label = STATUS.get((verdict or {}).get("conclusion"), ("none", "unknown"))
 
@@ -95,14 +108,13 @@ def card(entry: dict, meta: dict, commit: dict | None, verdict: dict | None,
       <div class="commit"><span class="msg dim">archived — not polled or tested</span></div>
     </div>"""
 
-    # monitored branch (the ref brainbug tracks) + mismatch flag vs the repo default
-    default_branch = meta.get("default_branch")
-    mismatch = default_branch and default_branch != ref
-    branch_cls = "branch mismatch" if mismatch else "branch"
-    branch_title = (f"tracking {ref}, but repo default is {default_branch}"
-                    if mismatch else f"monitored branch: {ref}")
-    branch_html = (f'<span class="{branch_cls}" title="{html.escape(branch_title)}">'
-                   f'⎇ {html.escape(ref)}</span>')
+    # brainbug monitors every branch — show the count, list them on hover
+    branches = branches or []
+    n = len(branches)
+    label_txt = "branch" if n == 1 else "branches"
+    branch_title = "monitored branches: " + (", ".join(branches[:40]) if branches else "—")
+    branch_html = (f'<span class="branch" title="{html.escape(branch_title)}">'
+                   f'⎇ {n} {label_txt}</span>')
 
     # description
     desc = (meta.get("description") or "").strip()
@@ -121,10 +133,8 @@ def card(entry: dict, meta: dict, commit: dict | None, verdict: dict | None,
             f'<span class="msg">{msg}</span>'
             f'<div class="meta">{author} · {when}</div>'
         )
-        tested = verdict and verdict.get("sha", "").startswith(sha)
     else:
         commit_html = '<span class="msg dim">commit unavailable</span>'
-        tested = False
 
     # repo stats (from metadata already fetched)
     lang = meta.get("language")
@@ -139,11 +149,13 @@ def card(entry: dict, meta: dict, commit: dict | None, verdict: dict | None,
         stats.append(f'<span class="stat">pushed {meta["pushed_at"][:10]}</span>')
     stats_html = f'<div class="stats">{"".join(stats)}</div>'
 
-    # brainbug verdict line
+    # brainbug verdict line — names the branch+sha of the most recent run
     if verdict:
         vwhen = (verdict.get("when") or "")[:10]
-        tag = ('<span class="tag fresh">latest tested</span>' if tested
-               else '<span class="tag stale">newer commit untested</span>')
+        vbranch = verdict.get("branch")
+        vsha = (verdict.get("sha") or "")[:7]
+        where = f"{vbranch}@{vsha}" if vbranch else vsha
+        tag = f'<span class="tag tested">last run · {html.escape(where)}</span>'
         verdict_html = f'<div class="verdict">{tag}<span class="vwhen">{vwhen}</span></div>'
     else:
         verdict_html = ""
@@ -170,7 +182,6 @@ def main() -> int:
     built_at = os.environ.get("BUILT_AT", "")
 
     cfg = yaml.safe_load((ROOT / "repos.yml").read_text())
-    default_ref = cfg.get("defaults", {}).get("ref", "main")
 
     print("fetching brainbug verdicts...")
     verdicts = latest_verdicts(brainbug, token)
@@ -179,17 +190,18 @@ def main() -> int:
     counts = {"ok": 0, "bad": 0, "other": 0, "archived": 0}
     for entry in cfg["repos"]:
         full = f"{entry['owner']}/{entry['repo']}"
-        ref = entry.get("ref", default_ref)
         meta = api(f"/repos/{full}", token) or {}
         archived = bool(meta.get("archived"))
-        print(f"  {full}@{ref}{' [archived]' if archived else ''}")
+        print(f"  {full}{' [archived]' if archived else ''}")
         if archived:
             cards.append(card(entry, meta, None, None, archived=True))
             counts["archived"] += 1
             continue
-        commit = api(f"/repos/{full}/commits/{ref}", token)
+        branches = branch_names(full, token)
+        head = meta.get("default_branch") or "main"
+        commit = api(f"/repos/{full}/commits/{head}", token)
         verdict = verdicts.get(full)
-        cards.append(card(entry, meta, commit, verdict, ref=ref))
+        cards.append(card(entry, meta, commit, verdict, branches=branches))
         c = (verdict or {}).get("conclusion")
         counts["ok" if c == "success" else "bad" if c == "failure" else "other"] += 1
 
@@ -262,6 +274,8 @@ TEMPLATE = """<!doctype html>
   .tag {{ display:inline-block; font-size:11px; padding:1px 8px; border-radius:4px; }}
   .tag.fresh {{ color:var(--ok); border:1px solid rgba(63,185,80,.4); }}
   .tag.stale {{ color:var(--warn); border:1px solid rgba(210,153,34,.4); }}
+  .tag.tested {{ color:var(--dim); border:1px solid var(--border);
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }}
   footer {{ max-width:1200px; margin:0 auto; padding:0 20px 40px; color:var(--dim); font-size:12px; }}
 </style>
 </head>
