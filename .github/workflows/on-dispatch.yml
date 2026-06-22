@@ -1,0 +1,17 @@
+# Entry point for poll-driven runs. The scheduled poller (poll.yml -> poll.py)
+# self-fires a `repository_dispatch` of type `upstream-commit` for each repo
+# whose SHA changed; those events land here and kick off the brainbug run.
+name: on-dispatch
+
+on:
+  repository_dispatch:
+    types: [upstream-commit]
+
+jobs:
+  run:
+    uses: ./.github/workflows/brainbug.yml
+    secrets: inherit
+    with:
+      repo: ${{ github.event.client_payload.repo }}
+      sha: ${{ github.event.client_payload.sha }}
+      ref: ${{ github.event.client_payload.ref || 'main' }}

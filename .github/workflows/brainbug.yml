@@ -1,0 +1,72 @@
+# Reusable workflow: check out an upstream repo at a SHA and run brainbug tests
+# against it. Called by on-dispatch.yml; can also be called manually.
+name: brainbug
+
+on:
+  workflow_call:
+    inputs:
+      repo:
+        description: 'owner/repo to test'
+        required: true
+        type: string
+      sha:
+        description: 'commit SHA to check out'
+        required: false
+        type: string
+        default: ''
+      ref:
+        description: 'branch/ref to check out when no SHA is given'
+        required: false
+        type: string
+        default: main
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'owner/repo to test'
+        required: true
+        type: string
+      sha:
+        required: false
+        type: string
+        default: ''
+      ref:
+        required: false
+        type: string
+        default: main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout brainbug (test definitions)
+        uses: actions/checkout@v4
+        with:
+          path: brainbug
+
+      - name: Checkout upstream repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.repo }}
+          ref: ${{ inputs.sha || inputs.ref }}
+          path: upstream
+          # for private upstreams, provide a token with read access:
+          token: ${{ secrets.BRAINBUG_PAT || github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        working-directory: brainbug
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e . || pip install pytest pyyaml
+
+      - name: Run brainbug tests against upstream
+        working-directory: brainbug
+        env:
+          UPSTREAM_DIR: ${{ github.workspace }}/upstream
+          UPSTREAM_REPO: ${{ inputs.repo }}
+          UPSTREAM_SHA: ${{ inputs.sha }}
+        run: pytest tests/ -v

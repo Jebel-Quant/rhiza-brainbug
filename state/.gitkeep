@@ -1,0 +1,2 @@
+# Poll state lives here: one file per third-party repo (owner__repo) holding the
+# last-seen commit SHA. Committed by the poll workflow. Do not delete this dir.

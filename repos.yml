@@ -1,0 +1,42 @@
+# rhiza-brainbug — monitored repositories
+#
+# Every repo here is polled on a schedule (scripts/poll.py): brainbug compares
+# each repo's latest commit SHA against the cached value in state/, and when it
+# changes it self-dispatches an `upstream-commit` event that runs the brainbug
+# tests against that repo. No workflow is installed in the monitored repos.
+#
+#   tests: glob(s) under tests/ to run for this repo. "tests/" runs all.
+#   ref:   branch to track / check out (default: defaults.ref below)
+
+defaults:
+  ref: main
+  tests:
+    - tests/
+
+repos:
+  # --- Jebel-Quant --------------------------------------------------------
+  - { owner: Jebel-Quant, repo: basanos }
+  - { owner: Jebel-Quant, repo: fast_minimum_variance }
+  - { owner: Jebel-Quant, repo: futures }
+  - { owner: Jebel-Quant, repo: greeks }
+  - { owner: Jebel-Quant, repo: jquantstats }
+  - { owner: Jebel-Quant, repo: linalg }
+  - { owner: Jebel-Quant, repo: rhiza-cli }
+  - { owner: Jebel-Quant, repo: rhiza-hooks }
+  - { owner: Jebel-Quant, repo: rhiza-tools }
+  - { owner: Jebel-Quant, repo: shrinkage }
+  - { owner: Jebel-Quant, repo: trends }
+
+  # --- tschm --------------------------------------------------------------
+  - { owner: tschm, repo: TinyCTA }
+  - { owner: tschm, repo: cs }
+  - { owner: tschm, repo: pyhrp }
+  - { owner: tschm, repo: jsharpe }
+  - { owner: tschm, repo: loman }
+
+  # --- cvxgrp -------------------------------------------------------------
+  - { owner: cvxgrp, repo: cvxcla }
+  - { owner: cvxgrp, repo: cvxrisk }
+  - { owner: cvxgrp, repo: simulator }
+  - { owner: cvxgrp, repo: cvxball }
+  - { owner: cvxgrp, repo: cvxmarkowitz }

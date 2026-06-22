@@ -1,0 +1,52 @@
+# Manual poller for ALL monitored repos. Detects new commits and
+# self-dispatches `upstream-commit` events, which flow through
+# on-dispatch.yml -> brainbug.yml. Last-seen SHAs are committed back to state/
+# so detection survives between runs.
+#
+# Manual-trigger only. Routine 1-minute polling is driven externally by
+# `make loop` (see README) to get cadence the GitHub `schedule` trigger can't
+# guarantee. Use the "Run workflow" button here for an ad-hoc poll.
+name: poll
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write   # to commit the updated state/ cache
+
+concurrency:
+  group: brainbug-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install pyyaml
+
+      - name: Poll & dispatch
+        env:
+          # BRAINBUG_PAT needs `repo` scope (cross-repo dispatch + private reads).
+          # Falls back to GITHUB_TOKEN, which can self-dispatch but cannot read
+          # private third-party repos.
+          GITHUB_TOKEN: ${{ secrets.BRAINBUG_PAT || github.token }}
+          BRAINBUG_REPO: ${{ github.repository }}
+        run: python scripts/poll.py
+
+      - name: Persist SHA cache
+        run: |
+          git config user.name  "brainbug-bot"
+          git config user.email "brainbug-bot@users.noreply.github.com"
+          if [ -n "$(git status --porcelain state/)" ]; then
+            git add state/
+            git commit -m "chore: update poll state [skip ci]"
+            git push
+          else
+            echo "no state changes"
+          fi
