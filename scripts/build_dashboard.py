@@ -81,7 +81,7 @@ STATUS = {
 
 
 def card(entry: dict, meta: dict, commit: dict | None, verdict: dict | None,
-         archived: bool = False) -> str:
+         ref: str = "main", archived: bool = False) -> str:
     full = f"{entry['owner']}/{entry['repo']}"
     cls, label = STATUS.get((verdict or {}).get("conclusion"), ("none", "unknown"))
 
@@ -94,6 +94,15 @@ def card(entry: dict, meta: dict, commit: dict | None, verdict: dict | None,
       </div>
       <div class="commit"><span class="msg dim">archived — not polled or tested</span></div>
     </div>"""
+
+    # monitored branch (the ref brainbug tracks) + mismatch flag vs the repo default
+    default_branch = meta.get("default_branch")
+    mismatch = default_branch and default_branch != ref
+    branch_cls = "branch mismatch" if mismatch else "branch"
+    branch_title = (f"tracking {ref}, but repo default is {default_branch}"
+                    if mismatch else f"monitored branch: {ref}")
+    branch_html = (f'<span class="{branch_cls}" title="{html.escape(branch_title)}">'
+                   f'⎇ {html.escape(ref)}</span>')
 
     # description
     desc = (meta.get("description") or "").strip()
@@ -145,7 +154,7 @@ def card(entry: dict, meta: dict, commit: dict | None, verdict: dict | None,
 
     return f"""    <div class="card">
       <div class="row">
-        <a class="name" href="https://github.com/{full}">{html.escape(full)}</a>
+        <div class="title"><a class="name" href="https://github.com/{full}">{html.escape(full)}</a>{branch_html}</div>
         {badge}
       </div>
       {desc_html}
@@ -180,7 +189,7 @@ def main() -> int:
             continue
         commit = api(f"/repos/{full}/commits/{ref}", token)
         verdict = verdicts.get(full)
-        cards.append(card(entry, meta, commit, verdict))
+        cards.append(card(entry, meta, commit, verdict, ref=ref))
         c = (verdict or {}).get("conclusion")
         counts["ok" if c == "success" else "bad" if c == "failure" else "other"] += 1
 
@@ -226,9 +235,13 @@ TEMPLATE = """<!doctype html>
   .card {{ background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:14px 16px; }}
   .card.archived {{ opacity:.5; filter:grayscale(1); background:#10141a; border-style:dashed; }}
   .card.archived .name {{ color:var(--dim); }}
-  .row {{ display:flex; align-items:center; justify-content:space-between; gap:8px; }}
+  .row {{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }}
+  .title {{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }}
   .name {{ font-weight:600; color:var(--fg); text-decoration:none; }}
   .name:hover {{ text-decoration:underline; }}
+  .branch {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;
+    color:var(--dim); background:rgba(110,118,129,.15); padding:1px 7px; border-radius:20px; }}
+  .branch.mismatch {{ color:var(--warn); background:rgba(210,153,34,.15); }}
   .badge {{ font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px;
     text-decoration:none; white-space:nowrap; }}
   .badge.ok {{ background:rgba(63,185,80,.15); color:var(--ok); }}
