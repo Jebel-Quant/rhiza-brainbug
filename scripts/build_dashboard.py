@@ -80,9 +80,20 @@ STATUS = {
 }
 
 
-def card(entry: dict, commit: dict | None, verdict: dict | None) -> str:
+def card(entry: dict, commit: dict | None, verdict: dict | None, archived: bool = False) -> str:
     full = f"{entry['owner']}/{entry['repo']}"
     cls, label = STATUS.get((verdict or {}).get("conclusion"), ("none", "unknown"))
+
+    if archived:
+        # Archived repos are inert — show a greyed-out card, no live verdict.
+        commit_html = '<span class="msg dim">archived — no longer monitored</span>'
+        return f"""    <div class="card archived">
+      <div class="row">
+        <a class="name" href="https://github.com/{full}">{html.escape(full)}</a>
+        <span class="badge none">archived</span>
+      </div>
+      <div class="commit">{commit_html}</div>
+    </div>"""
 
     if commit:
         c = commit["commit"]
@@ -131,11 +142,17 @@ def main() -> int:
     verdicts = latest_verdicts(brainbug, token)
 
     cards = []
-    counts = {"ok": 0, "bad": 0, "other": 0}
+    counts = {"ok": 0, "bad": 0, "other": 0, "archived": 0}
     for entry in cfg["repos"]:
         full = f"{entry['owner']}/{entry['repo']}"
         ref = entry.get("ref", default_ref)
-        print(f"  {full}@{ref}")
+        meta = api(f"/repos/{full}", token) or {}
+        archived = bool(meta.get("archived"))
+        print(f"  {full}@{ref}{' [archived]' if archived else ''}")
+        if archived:
+            cards.append(card(entry, None, None, archived=True))
+            counts["archived"] += 1
+            continue
         commit = api(f"/repos/{full}/commits/{ref}", token)
         verdict = verdicts.get(full)
         cards.append(card(entry, commit, verdict))
@@ -148,6 +165,7 @@ def main() -> int:
         ok=counts["ok"],
         bad=counts["bad"],
         other=counts["other"],
+        archived=counts["archived"],
         built_at=html.escape(built_at),
         cards="\n".join(cards),
     )
@@ -180,6 +198,8 @@ TEMPLATE = """<!doctype html>
   main {{ max-width:980px; margin:0 auto; padding:8px 20px 48px;
     display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px; }}
   .card {{ background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:14px 16px; }}
+  .card.archived {{ opacity:.5; filter:grayscale(1); background:#10141a; border-style:dashed; }}
+  .card.archived .name {{ color:var(--dim); }}
   .row {{ display:flex; align-items:center; justify-content:space-between; gap:8px; }}
   .name {{ font-weight:600; color:var(--fg); text-decoration:none; }}
   .name:hover {{ text-decoration:underline; }}
@@ -203,7 +223,7 @@ TEMPLATE = """<!doctype html>
 <header>
   <h1>brainbug <span class="mono">· monitored repos</span></h1>
   <div class="summary">
-    {total} repos · <b class="ok">{ok} passing</b> · <b class="bad">{bad} failing</b> · {other} other
+    {total} repos · <b class="ok">{ok} passing</b> · <b class="bad">{bad} failing</b> · {other} other · {archived} archived
   </div>
 </header>
 <main>

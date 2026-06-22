@@ -15,6 +15,7 @@ defaults:
 
 repos:
   # --- Jebel-Quant --------------------------------------------------------
+  - { owner: Jebel-Quant, repo: rhiza }
   - { owner: Jebel-Quant, repo: basanos }
   - { owner: Jebel-Quant, repo: fast_minimum_variance }
   - { owner: Jebel-Quant, repo: greeks }
