@@ -1,13 +1,14 @@
 # Build the status dashboard and publish it to GitHub Pages.
-# Refreshes on a 15-min schedule (picks up new commits + brainbug verdicts), on
-# pushes to main that touch the dashboard, and on demand.
-#
-# Deliberately NOT triggered per brainbug run: that fired a build after every
-# upstream-commit run, and a burst (e.g. the backfill) stacked dozens of builds
-# that cancelled each other into red "cancelled" noise. The schedule covers it.
+# Rebuilds after each brainbug run (workflow_run) so verdicts are fresh within a
+# minute, plus a schedule safety-net, pushes that touch the dashboard, and on
+# demand. With concurrency cancel-in-progress:false, a multi-branch sync burst
+# may show a few "cancelled" Pages runs — cosmetic; the latest always deploys.
 name: pages
 
 on:
+  workflow_run:
+    workflows: [on-dispatch]
+    types: [completed]
   push:
     branches: [main]
     paths:
