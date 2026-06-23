@@ -52,6 +52,22 @@ def branch_names(full: str, token: str) -> list[str]:
     return [b["name"] for b in (data or [])]
 
 
+def branch_has_pyproject(full: str, ref: str, token: str) -> bool:
+    """True if a branch carries pyproject.toml (quiet — no error logging).
+
+    Branches without one (paper/docs/LaTeX) aren't Python targets, so they
+    shouldn't be counted as failing on the dashboard.
+    """
+    req = urllib.request.Request(f"{API}/repos/{full}/contents/pyproject.toml?ref={ref}")
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github+json")
+    try:
+        with urllib.request.urlopen(req):  # noqa: S310
+            return True
+    except urllib.error.HTTPError as exc:
+        return exc.code != 404  # permissive on transient/other errors
+
+
 def latest_verdicts(brainbug: str, token: str) -> dict[str, dict[str, dict]]:
     """Map 'owner/repo' -> {branch -> latest run {conclusion, url, sha, branch, when}}.
 
@@ -224,6 +240,8 @@ def main() -> int:
         monitored = set(branches)
         failing = [b for b, v in repo_verdicts.items()
                    if b != head and b in monitored and v.get("conclusion") == "failure"]
+        # don't count branches that aren't Python targets (no pyproject.toml)
+        failing = [b for b in failing if branch_has_pyproject(full, b, token)]
         cards.append(card(entry, meta, commit, verdict, branches=branches, failing=failing))
         c = (verdict or {}).get("conclusion")
         counts["ok" if c == "success" else "bad" if c == "failure" else "other"] += 1

@@ -52,6 +52,21 @@ def _request(url: str, token: str, method: str = "GET", payload: dict | None = N
         return resp.status, (json.loads(body) if body else None)
 
 
+def has_pyproject(owner: str, repo: str, ref: str, token: str) -> bool:
+    """True if the branch carries a pyproject.toml (i.e. is a Python target).
+
+    Branches without one (paper/docs/LaTeX branches, …) are not testable, so the
+    poller ignores them rather than dispatching a run that has nothing to check.
+    """
+    try:
+        _request(f"{API}/repos/{owner}/{repo}/contents/pyproject.toml?ref={ref}", token)
+        return True
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        return True  # be permissive on transient/other errors
+
+
 def is_archived(owner: str, repo: str, token: str) -> bool:
     """Archived repos are inert — never poll or test them."""
     try:
@@ -131,11 +146,18 @@ def main() -> int:
             if previous.get(branch) == sha:
                 continue
             old = previous.get(branch)
+            # Ignore branches with no pyproject.toml (paper/docs/LaTeX branches).
+            # Checked only for CHANGED branches, so it stays cheap.
+            if not has_pyproject(owner, repo, sha, token):
+                print(f"  · {owner}/{repo}@{branch} no pyproject.toml — ignored")
+                continue
             print(f"  + {owner}/{repo}@{branch} {(old or 'new')[:8]} -> {sha[:8]} — dispatching")
             dispatch(brainbug, token, owner, repo, sha, branch)
             changed += 1
 
         # Rewrite the map from the live branch list (prunes deleted branches).
+        # Ignored branches keep their SHA here so they aren't re-checked until
+        # they change again.
         cache.write_text(json.dumps(branches, indent=2, sort_keys=True) + "\n")
 
     print(f"done: {changed} branch(es) dispatched, {skipped} archived skipped")
