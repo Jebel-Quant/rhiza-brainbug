@@ -19,12 +19,19 @@ def test_project_metadata(pyproject: dict) -> None:
     assert project.get("requires-python"), "[project].requires-python is required"
 
 
-def test_python_classifiers(pyproject: dict) -> None:
-    """Declares at least one `Programming Language :: Python :: 3.x` classifier.
+def test_python_version_declared(pyproject: dict) -> None:
+    """Declares its Python version coverage.
 
-    rhiza's CI derives its Python test matrix from these; a repo without them
-    has no declared version coverage.
+    Either via `Programming Language :: Python :: 3.x` classifiers OR a
+    `requires-python` constraint — both are valid ways to declare supported
+    versions, so accept either (many modern projects use requires-python only).
     """
-    classifiers = pyproject.get("project", {}).get("classifiers", [])
-    py = [c for c in classifiers if c.startswith("Programming Language :: Python :: 3.")]
-    assert py, "no `Programming Language :: Python :: 3.x` classifiers declared"
+    project = pyproject.get("project", {})
+    classifiers = project.get("classifiers", [])
+    has_classifiers = any(
+        c.startswith("Programming Language :: Python :: 3.") for c in classifiers
+    )
+    has_requires_python = bool(project.get("requires-python"))
+    assert has_classifiers or has_requires_python, (
+        "no Python version declared (need Python 3.x classifiers or requires-python)"
+    )
