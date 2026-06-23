@@ -21,7 +21,9 @@ defaults:
 
 repos:
   # --- Jebel-Quant --------------------------------------------------------
-  - { owner: Jebel-Quant, repo: rhiza }
+  # NB: Jebel-Quant/rhiza itself is intentionally NOT monitored — it's the
+  # config-template repo (no src/ package), so the Python check battery doesn't
+  # apply. Its downstream consumers are monitored instead.
   - { owner: Jebel-Quant, repo: basanos }
   - { owner: Jebel-Quant, repo: fast_minimum_variance }
   - { owner: Jebel-Quant, repo: greeks }
