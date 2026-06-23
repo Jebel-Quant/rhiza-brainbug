@@ -52,35 +52,42 @@ def branch_names(full: str, token: str) -> list[str]:
     return [b["name"] for b in (data or [])]
 
 
-def latest_verdicts(brainbug: str, token: str) -> dict[str, dict]:
-    """Map 'owner/repo' -> latest brainbug run {conclusion, url, sha, branch, when}.
+def latest_verdicts(brainbug: str, token: str) -> dict[str, dict[str, dict]]:
+    """Map 'owner/repo' -> {branch -> latest run {conclusion, url, sha, branch, when}}.
 
     Run names are "brainbug · owner/repo · branch · sha" (older runs omit the
-    branch: "brainbug · owner/repo · sha"). Runs arrive newest-first; the first
-    one seen per repo is the latest across all its branches.
+    branch: "brainbug · owner/repo · sha"). Runs arrive newest-first, so the first
+    run seen per (repo, branch) is that branch's latest. Paginated because the
+    monitored repos have many branches.
     """
-    data = api(
-        f"/repos/{brainbug}/actions/workflows/on-dispatch.yml/runs?per_page=100",
-        token,
-    )
-    out: dict[str, dict] = {}
-    for run in (data or {}).get("workflow_runs", []):
-        parts = [p.strip() for p in run.get("name", "").split("·")]
-        if len(parts) == 4:
-            repo, branch, sha = parts[1], parts[2], parts[3]
-        elif len(parts) == 3:
-            repo, branch, sha = parts[1], None, parts[2]
-        else:
-            continue
-        if repo in out:
-            continue
-        out[repo] = {
-            "conclusion": run.get("conclusion") or run.get("status"),
-            "url": run.get("html_url"),
-            "sha": sha,
-            "branch": branch,
-            "when": run.get("created_at"),
-        }
+    out: dict[str, dict[str, dict]] = {}
+    for page in range(1, 6):  # up to 500 runs
+        data = api(
+            f"/repos/{brainbug}/actions/workflows/on-dispatch.yml/runs"
+            f"?per_page=100&page={page}",
+            token,
+        )
+        runs = (data or {}).get("workflow_runs", [])
+        if not runs:
+            break
+        for run in runs:
+            parts = [p.strip() for p in run.get("name", "").split("·")]
+            if len(parts) == 4:
+                repo, branch, sha = parts[1], parts[2], parts[3]
+            elif len(parts) == 3:
+                repo, branch, sha = parts[1], "(legacy)", parts[2]
+            else:
+                continue
+            per_branch = out.setdefault(repo, {})
+            if branch in per_branch:  # already have this branch's newest
+                continue
+            per_branch[branch] = {
+                "conclusion": run.get("conclusion") or run.get("status"),
+                "url": run.get("html_url"),
+                "sha": sha,
+                "branch": branch,
+                "when": run.get("created_at"),
+            }
     return out
 
 
@@ -95,7 +102,8 @@ STATUS = {
 
 
 def card(entry: dict, meta: dict, commit: dict | None, verdict: dict | None,
-         branches: list[str] | None = None, archived: bool = False) -> str:
+         branches: list[str] | None = None, failing: list[str] | None = None,
+         archived: bool = False) -> str:
     full = f"{entry['owner']}/{entry['repo']}"
     cls, label = STATUS.get((verdict or {}).get("conclusion"), ("none", "unknown"))
 
@@ -109,13 +117,19 @@ def card(entry: dict, meta: dict, commit: dict | None, verdict: dict | None,
       <div class="commit"><span class="msg dim">archived — not polled or tested</span></div>
     </div>"""
 
-    # brainbug monitors every branch — show the count, list them on hover
+    # brainbug monitors every branch — badge follows the default branch; show the
+    # branch count plus how many branches are currently failing.
     branches = branches or []
+    failing = failing or []
     n = len(branches)
     label_txt = "branch" if n == 1 else "branches"
     branch_title = "monitored branches: " + (", ".join(branches[:40]) if branches else "—")
     branch_html = (f'<span class="branch" title="{html.escape(branch_title)}">'
                    f'⎇ {n} {label_txt}</span>')
+    if failing:
+        fail_title = "failing branches: " + ", ".join(sorted(failing)[:40])
+        branch_html += (f'<span class="branch failcount" title="{html.escape(fail_title)}">'
+                        f'{len(failing)} failing</span>')
 
     # description
     desc = (meta.get("description") or "").strip()
@@ -203,8 +217,14 @@ def main() -> int:
         branches = [b for b in branch_names(full, token) if is_monitored(b, filters)]
         head = meta.get("default_branch") or "main"
         commit = api(f"/repos/{full}/commits/{head}", token)
-        verdict = verdicts.get(full)
-        cards.append(card(entry, meta, commit, verdict, branches=branches))
+        # Badge follows the DEFAULT branch; count other CURRENTLY-MONITORED
+        # branches that are failing (ignore stale verdicts for gone branches).
+        repo_verdicts = verdicts.get(full, {})
+        verdict = repo_verdicts.get(head)
+        monitored = set(branches)
+        failing = [b for b, v in repo_verdicts.items()
+                   if b != head and b in monitored and v.get("conclusion") == "failure"]
+        cards.append(card(entry, meta, commit, verdict, branches=branches, failing=failing))
         c = (verdict or {}).get("conclusion")
         counts["ok" if c == "success" else "bad" if c == "failure" else "other"] += 1
 
@@ -257,6 +277,7 @@ TEMPLATE = """<!doctype html>
   .branch {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:11px;
     color:var(--dim); background:rgba(110,118,129,.15); padding:1px 7px; border-radius:20px; }}
   .branch.mismatch {{ color:var(--warn); background:rgba(210,153,34,.15); }}
+  .branch.failcount {{ color:var(--bad); background:rgba(248,81,73,.15); }}
   .badge {{ font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px;
     text-decoration:none; white-space:nowrap; }}
   .badge.ok {{ background:rgba(63,185,80,.15); color:var(--ok); }}
