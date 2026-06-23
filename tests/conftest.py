@@ -15,6 +15,7 @@ Tool versions are pinned to match rhiza's pre-commit / make targets.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tomllib
 from pathlib import Path
@@ -75,6 +76,24 @@ def pyproject(upstream: Path) -> dict:
     if not f.exists():
         pytest.skip("upstream has no pyproject.toml")
     return tomllib.loads(f.read_text())
+
+
+def python_target(pyproject: dict) -> str:
+    """ruff --target-version (pyXY) from the upstream's minimum Python.
+
+    Reads ``requires-python`` first, then ``Programming Language :: Python``
+    classifiers; falls back to py312. The minimum is what ruff needs so it
+    parses the source at the right syntax level (PEP 695 generics need 3.12+).
+    """
+    proj = pyproject.get("project", {})
+    minors = [int(m) for m in re.findall(r"3\.(\d+)", proj.get("requires-python", ""))]
+    if not minors:
+        minors = [
+            int(m.group(1))
+            for c in proj.get("classifiers", [])
+            if (m := re.match(r"Programming Language :: Python :: 3\.(\d+)$", c))
+        ]
+    return f"py3{min(minors)}" if minors else "py312"
 
 
 @pytest.fixture(scope="session")
