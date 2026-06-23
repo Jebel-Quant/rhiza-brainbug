@@ -107,6 +107,11 @@ ignore = [
     "ANN401",  # dynamically typed *args/**kwargs in framework hooks are intentional
     "D203",  # one-blank-line-before-class (conflicts with D211)
     "D213",  # multi-line-summary-second-line (conflicts with D212)
+    # Math notation: the monitored repos are quantitative libraries where
+    # uppercase symbols are standard (Black-Scholes S/K/T, matrices A/P/Q, ...).
+    # pep8-naming's lowercase rules fight this convention, so relax them centrally.
+    "N803",  # argument name should be lowercase (e.g. def _d1(S, K, T, ...))
+    "N806",  # variable in function should be lowercase (e.g. covariance matrix P)
 ]
 
 [lint.pydocstyle]
