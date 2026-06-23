@@ -98,21 +98,27 @@ def python_target(pyproject: dict) -> str:
 
 @pytest.fixture(scope="session")
 def src_dir(upstream: Path) -> Path:
-    """Best-guess source directory of the upstream.
+    """The upstream's source package.
 
     Prefers ``src/``; else a top-level importable package (has __init__.py and
-    is not tests/docs/etc.); else falls back to the repo root.
+    is not tests/docs/etc.). If neither exists the repo has no conventional
+    package, so the source-scanning checks (ruff, bandit, interrogate, deptry,
+    semgrep) are SKIPPED rather than scanning the repo root — which would sweep
+    .rhiza/ (rhiza's synced toolkit), notebooks and other non-source files and
+    report them as findings.
     """
     if (upstream / "src").is_dir():
         return upstream / "src"
     skip = {"tests", "test", "docs", "doc", "examples", "notebooks", "book",
-            ".venv", ".git", "build", "dist"}
+            ".rhiza", ".venv", ".git", "build", "dist"}
     candidates = [
         d for d in sorted(upstream.iterdir())
         if d.is_dir() and d.name not in skip and not d.name.startswith(".")
         and (d / "__init__.py").exists()
     ]
-    return candidates[0] if candidates else upstream
+    if candidates:
+        return candidates[0]
+    pytest.skip("no source package (src/ or top-level package) — source checks N/A")
 
 
 @pytest.fixture(scope="session")
