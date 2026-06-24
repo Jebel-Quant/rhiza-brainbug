@@ -1,8 +1,8 @@
 {
-  "add-claude-commands": "d26eda6ccafcf4457423b1c1418c897f26304e0f",
   "add-claude-commands-upstream": "09146ee1d1ee4a36c887214e9b798e969b0e456d",
-  "chore/add-rhiza-claude-commands": "2bfc6ce8f9eb0fe16dfa9cc984c540419a8617a3",
-  "master": "2df782ed2b86bbeff70812d59599f39500cd9c78",
+  "copilot/fix-github-actions-job-book": "cbfa3a0cd0b17d3455e9310810c8e2decbfd40f2",
+  "fix/bump-pillow": "d1cdf5697e4aff95eaf894c170bc8a1eeb07db2d",
+  "master": "fc3c294a3adeae6e4720f7734e003c7550665fe1",
   "rhiza_v0.18.4": "854e28f55850a8166230e7861ca540d38b400ea4",
   "rhiza_v0.18.8": "6e46d5d5882d0eff36ce6b6326a85412023b4a84",
   "split/completions": "07ab47cac6e89e47e0bffbc4379e87cd2a65ad91",
